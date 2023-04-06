@@ -1,0 +1,119 @@
+{
+  "$schema": "https://hypar.io/Schemas/Function.json",
+  "id": "1e5b9801-1f55-4d1b-b0c3-9bf62671d4a7",
+  "name": "Domino",
+  "description": "The Domino function.",
+  "language": "C#",
+  "overrides": {
+    "SubUnitSet": {
+      "context": "[*discriminator=Elements.SubUnitSet]",
+      "identity": {
+        "Add Id": {
+          "type": "string"
+        }
+      },
+      "behaviors": {
+        "add": {
+          "schema": {
+            "SubUnits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "$hyparStyle": "row",
+                "properties": {
+                  "Color": {
+                    "$ref": "https://hypar.io/Schemas/Geometry/Color.json",
+                    "$hyparOrder": 0
+                  },
+                  "Type Name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "$hyparOrder": 1
+                  },
+                  "Length": {
+                    "type": "number",
+                    "$hyparOrder": 2,
+                    "minimum": 0.01,
+                    "$hyparUnitType": "length"
+                  },
+                  "Width": {
+                    "type": "number",
+                    "$hyparOrder": 3,
+                    "minimum": 0.01,
+                    "$hyparUnitType": "length"
+                  },
+                  "Height": {
+                    "type": "number",
+                    "$hyparOrder": 4,
+                    "minimum": 0.01,
+                    "$hyparUnitType": "length"
+                  },
+                  "Category": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "$hyparOrder": 5
+                  }
+                }
+              }
+            }
+          }
+        },
+        "remove": true
+      },
+      "schema": {
+        "SubUnits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$hyparStyle": "row",
+            "properties": {
+              "Color": {
+                "$ref": "https://hypar.io/Schemas/Geometry/Color.json",
+                "$hyparOrder": 0
+              },
+              "Type Name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "$hyparOrder": 1
+              },
+              "Length": {
+                "type": "number",
+                "$hyparOrder": 2,
+                "minimum": 0.01,
+                "$hyparUnitType": "length"
+              },
+              "Width": {
+                "type": "number",
+                "$hyparOrder": 3,
+                "minimum": 0.01,
+                "$hyparUnitType": "length"
+              },
+              "Height": {
+                "type": "number",
+                "$hyparOrder": 4,
+                "minimum": 0.01,
+                "$hyparUnitType": "length"
+              },
+              "Category": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "$hyparOrder": 5
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "repository_url": "https://github.com/hypar-io/function",
+  "source_file_key": null,
+  "preview_image": null
+}

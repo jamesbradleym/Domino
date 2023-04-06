@@ -1,0 +1,311 @@
+using Elements;
+using Elements.Geometry;
+using System.Collections.Generic;
+
+namespace Domino
+{
+    public static class Domino
+    {
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="model">The input model.</param>
+        /// <param name="input">The arguments to the execution.</param>
+        /// <returns>A DominoOutputs instance containing computed results and the model with any new elements.</returns>
+        public static DominoOutputs Execute(Dictionary<string, Model> inputModels, DominoInputs input)
+        {
+            var output = new DominoOutputs();
+
+            var siterectangle = Polygon.Rectangle((0, 0, 0), (input.SiteLength, input.SiteWidth, 0));
+            output.Model.AddElement(siterectangle);
+
+            var units = new Dictionary<string, List<Dictionary<string, double>>>
+            {
+              { "studio",
+                new List<Dictionary<string, double>>
+                {
+                  new Dictionary<string, double> { { "width", 3.5 }, { "length", 5 } },
+                  new Dictionary<string, double> { { "width", 4.0 }, { "length", 5.5 } },
+                  new Dictionary<string, double> { { "width", 4.5 }, { "length", 6 } },
+                }
+              },
+              { "onebedroom",
+                new List<Dictionary<string, double>>
+                {
+                  new Dictionary<string, double> { { "width", 3.5 }, { "length", 5 } },
+                  new Dictionary<string, double> { { "width", 4.0 }, { "length", 5.5 } },
+                  new Dictionary<string, double> { { "width", 4.5 }, { "length", 6 } },
+                }
+             },
+              { "twobedroom",
+                new List<Dictionary<string, double>>
+                {
+                  new Dictionary<string, double> { { "width", 3.5 }, { "length", 5 } },
+                  new Dictionary<string, double> { { "width", 4.0 }, { "length", 5.5 } },
+                  new Dictionary<string, double> { { "width", 4.5 }, { "length", 6 } },
+                }
+              }
+            };
+
+            // The ideal total length each unit type will use
+            var lengths = new Dictionary<String, double>();
+            foreach (var item in units.Keys.Select((value, i) => new { i, value }))
+            {
+                lengths[item.value] = input.Mix[item.i] * input.SiteLength;
+            }
+            var waste = input.SiteLength - lengths.Values.Sum();
+            // for now, randomly select a unit type to add this length to
+            lengths[lengths.Keys.ToList()[new Random().Next(lengths.Keys.Count)]] += waste;
+
+            output.Model.AddElements(naiveMethod(units, lengths, new Vector3(0, 0, 0)));
+            output.Model.AddElements(exhaustiveMethod(units, lengths, new Vector3(0, -10, 0)));
+
+            return output;
+        }
+
+        private static IEnumerable<Element> exhaustiveMethod(Dictionary<string, List<Dictionary<string, double>>> units, Dictionary<String, double> lengths, Vector3 origin)
+        {
+            List<Element> result = new List<Element>();
+
+            var lengthOptimization = 0.0;
+
+            // exhaustive
+
+            // Dictionary<string, List<double>> data = new Dictionary<string, List<double>>();
+            // var maxStudioCount = (int)Math.Floor(lengths["studio"] / units["studio"].MinBy(kvp => kvp["width"])["width"]);
+            // foreach (int value in Enumerable.Range(1, maxStudioCount))
+            // {
+            //     data.Add($"{value}", units["studio"].Select(c => c["width"]).ToList());
+            //     // data.Add($"{value}", new List<double> {0.0, 0.1});
+            // }
+
+            // var sums = new List<double>();
+            // var p4 = GetValidPermutations(lengths["studio"], data);
+            // foreach (var p in p4)
+            // {
+            //     sums.Add(p.Values.Sum());
+            // }
+
+            var count = 1;
+            var offset1 = 0.0;
+            foreach (var type in units.Keys)
+            {
+                List<List<double>> data = new List<List<double>>();
+                var maxCount = (int)Math.Floor(lengths[type] / units[type].MinBy(kvp => kvp["width"])["width"]);
+                foreach (int value in Enumerable.Range(1, maxCount))
+                {
+                    data.Add(units[type].Select(c => c["width"]).ToList());
+                    // data.Add($"{value}", new List<double> {0.0, 0.1});
+                }
+                var t = CartesianProduct(data, lengths[type]);
+                var a = new List<Dictionary<String, object>>();
+                foreach (var solution in t)
+                {
+                    var culled = solution.Where(u => u > 0).ToList();
+                    var d = new Dictionary<String, dynamic>();
+                    d.Add("unitCountEfficiency", culled.Count() / maxCount);
+                    d.Add("variance", culled.GetStandardDeviation());
+                    d.Add("spaceEfficiency", culled.Sum() / lengths[type]);
+                    d.Add("score", ((culled.Count() / maxCount) + (culled.Sum() / lengths[type]) + culled.GetStandardDeviation()) / 3);
+                    d.Add("solution", culled.ToList());
+                    a.Add(d);
+                }
+
+                var s = (List<double>)a.MaxBy(r => r["score"])["solution"];
+
+                var rects = new List<Polygon>();
+                foreach (var opt in s)
+                {
+                    var length = units[type][new Random().Next(units[type].Count)]["length"];
+                    var rectangle = Polygon.Rectangle((origin), (origin.X + opt, origin.Y + length, 0));
+                    // rectangle.Offset(offset+opt/2);
+                    rectangle.Transform(new Transform(offset1, 0, 0));
+                    rects.Add(rectangle);
+                    offset1 += opt;
+                    result.Add(rectangle);
+
+                    var labeltexts = new List<(Vector3 location, Vector3 facingDirection, Vector3 lineDirection, string text, Color? color)>();
+                    labeltexts.Add((new Vector3(rectangle.Centroid().X, rectangle.Centroid().Y), Vector3.ZAxis, Vector3.XAxis, $"Perm: {type}:", new Color(1.0f, 0.0f, 0.0f, 1.0f)));
+                    labeltexts.Add((new Vector3(rectangle.Centroid().X, rectangle.Centroid().Y - 0.5), Vector3.ZAxis, Vector3.XAxis, $"{opt}x{length}", new Color(1.0f, 0.0f, 0.0f, 1.0f)));
+                    var labelmodelText = new ModelText(labeltexts, FontSize.PT36, 30);
+
+                    result.Add(labelmodelText);
+                }
+                lengthOptimization = s.Sum() / lengths[type];
+
+                var analysistexts = new List<(Vector3 location, Vector3 facingDirection, Vector3 lineDirection, string text, Color? color)>();
+                analysistexts.Add((new Vector3(-5, -1 * count, 0), Vector3.ZAxis, Vector3.XAxis, $"Perm: {type} Length Optimization: {Math.Round(lengthOptimization, 3)}", new Color(1.0f, 0.0f, 0.0f, 1.0f)));
+                var analysismodelText = new ModelText(analysistexts, FontSize.PT12, 100);
+
+                result.Add(analysismodelText);
+
+                count += 1;
+            }
+            return result;
+        }
+
+        static IEnumerable<Element> naiveMethod(Dictionary<string, List<Dictionary<string, double>>> units, Dictionary<String, double> lengths, Vector3 origin)
+        {
+            List<Element> result = new List<Element>();
+
+            // Naive
+            // The ideal total length each unit type will use
+            var lengthOptimization = 0.0;
+
+            var count = 1;
+            var offset = 0.0;
+            foreach (var type in units.Keys)
+            {
+                var optimized = new List<Dictionary<String, double>>();
+                var optimizing = true;
+                while (optimizing)
+                {
+                    var sum = 0.0;
+                    optimized.ForEach(x => sum += x["width"]);
+                    if (sum > lengths[type])
+                    {
+                        optimizing = false;
+                    }
+                    else
+                    {
+                        var toFill = lengths[type] - sum;
+                        var solving = true;
+                        while (solving)
+                        {
+                            var validWidths = units[type].FindAll(e => e["width"] <= toFill);
+                            if (validWidths.Count > 0)
+                            {
+                                var next = validWidths[new Random().Next(validWidths.Count)];
+                                optimized.Add(next);
+                                solving = false;
+                            }
+                            else
+                            {
+                                solving = false;
+                                optimizing = false;
+                                lengthOptimization = sum / lengths[type];
+                            }
+                        }
+                    }
+                }
+
+                var rects = new List<Polygon>();
+                foreach (var opt in optimized)
+                {
+                    var rectangle = Polygon.Rectangle((origin), (origin.X + opt["width"], origin.Y + opt["length"], 0));
+                    // rectangle.Offset(offset+opt/2);
+                    rectangle.Transform(new Transform(offset, 0, 0));
+                    rects.Add(rectangle);
+                    offset += opt["width"];
+
+                    var _texts = new List<(Vector3 location, Vector3 facingDirection, Vector3 lineDirection, string text, Color? color)>();
+                    _texts.Add((new Vector3(rectangle.Centroid().X, rectangle.Centroid().Y), Vector3.ZAxis, Vector3.XAxis, $"{type}:", new Color(1.0f, 0.0f, 0.0f, 1.0f)));
+                    _texts.Add((new Vector3(rectangle.Centroid().X, rectangle.Centroid().Y - 0.5), Vector3.ZAxis, Vector3.XAxis, $"{opt["width"]}x{opt["length"]}", new Color(1.0f, 0.0f, 0.0f, 1.0f)));
+                    var _modelText = new ModelText(_texts, FontSize.PT36, 30);
+                    result.Add(rectangle);
+                    result.Add(_modelText);
+                }
+
+                var texts = new List<(Vector3 location, Vector3 facingDirection, Vector3 lineDirection, string text, Color? color)>();
+                texts.Add((new Vector3(-5, 1 * count), Vector3.ZAxis, Vector3.XAxis, $"{type} Length Optimization: {Math.Round(lengthOptimization, 3)}", new Color(1.0f, 0.0f, 0.0f, 1.0f)));
+                var modelText = new ModelText(texts, FontSize.PT12, 100);
+                result.Add(modelText);
+
+                count += 1;
+            }
+
+            return result;
+        }
+
+        static IEnumerable<IEnumerable<double>> CartesianProduct(this IEnumerable<IEnumerable<double>> sequences, double target)
+        {
+            // base case: 
+            IEnumerable<IEnumerable<double>> result =
+              new[] { Enumerable.Empty<double>() };
+            foreach (var sequence in sequences)
+            {
+                // don't close over the loop variable (fixed in C# 5 BTW)
+                var s = sequence;
+                // recursive case: use SelectMany to build 
+                // the new product out of the old one 
+                // LINQ has an operator specifically for making Cartesian products: 
+                // in “fluent” syntax it is SelectMany, in “query comprehension” syntax 
+                // it is a query with two “from” clauses
+                // https://ericlippert.com/2010/06/28/computing-a-cartesian-product-with-linq/
+                result =
+                // current permutation
+                  from seq in result
+                      // current options available to include
+                  from item in s
+                      // recursively add option to permutation
+                  select seq.Concat(new[] { seq.Sum(v => Convert.ToDouble(v)) + Convert.ToDouble(item) <= target ? item : 0.0 });
+            }
+            return result.ToList();
+        }
+
+        public static double GetStandardDeviation(this IEnumerable<double> values)
+        {
+            double standardDeviation = 0;
+            double[] enumerable = values as double[] ?? values.ToArray();
+            int count = enumerable.Count();
+            if (count > 1)
+            {
+                double avg = enumerable.Average();
+                double sum = enumerable.Sum(d => (d - avg) * (d - avg));
+                standardDeviation = Math.Sqrt(sum / count);
+            }
+            return standardDeviation;
+        }
+
+        static List<Dictionary<string, double>> GetValidPermutations(double target, Dictionary<string, List<double>> data)
+        {
+            return GetValidPermutations(target, data, 0, new double[data.Count])
+                    .Select(perm => CreateDictionary(data.Keys, perm))
+                    .ToList();
+        }
+
+        static Dictionary<string, double> CreateDictionary(IEnumerable<string> keys, IEnumerable<double> values)
+        {
+            return keys.Zip(values, KeyValuePair.Create)
+                       .ToDictionary(pair => pair.Key, pair => pair.Value);
+        }
+
+        static IEnumerable<double[]> GetValidPermutations(double target, Dictionary<string, List<double>> data, int level, double[] sequence)
+        {
+            if (level < sequence.Length)
+            {
+                // get the current options at this permutation level
+                var currentList = data.ElementAt(level).Value;
+                // get lists following the current one
+                var subsequentLists = data.Skip(level + 1).Select(x => x.Value);
+                // Find valid start point for iteration of values
+                // values smaller than this can be skipped as they would be invalid inputs
+                // assumes last value is the largest
+                double start = Math.Max(currentList[0], target - subsequentLists.Sum(x => x.Last()));
+                // Find valid end point for iteration of values
+                // values larger than this can be skipped as they would be invalid inputs
+                // assumes first value is the smallest
+                double end = Math.Min(currentList.Last(), target - subsequentLists.Sum(x => x[0]));
+                //
+                for (sequence[level] = start; sequence[level] <= end; sequence[level]++)
+                {
+                    // recursive target to hit in subsequent permutation
+                    double subTarget = target - sequence[level];
+                    // rinse and repeat
+                    foreach (var perm in GetValidPermutations(subTarget, data, level + 1, sequence))
+                    {
+                        //
+                        yield return perm;
+                    }
+                }
+            }
+            else
+            {
+                var perm = sequence.Append(target);
+                var s = perm.Sum();
+                // System.Diagnostics.Debug.Assert(perm.Sum() <= target);
+                yield return perm.ToArray();
+            }
+        }
+    }
+}
